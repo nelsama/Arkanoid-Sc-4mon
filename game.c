@@ -230,6 +230,14 @@ static const uint8_t caps_P_p1[8] = { 0x00, 0x7E, 0xFF, 0xFF, 0xFF, 0xFF, 0x7E, 
 #define PAL_TEXT      VC_BGPAL_0   /* tinta de texto (blanca)                */
 #define PAL_TITLE     VC_BGPAL_2   /* tinta del banner                       */
 
+/* --- TEXTOS COMPARTIDOS ---------------------------------------------------
+ * cc65 deduplica literales identicos, asi que la MISMA cadena usada en varias
+ * pantallas ocupa RODATA una sola vez. Estos defines evitan repetir el literal
+ * (y ademas garantizan que las copias sean byte a byte iguales, que es lo que
+ * permite al compilador reutilizarlas).                                       */
+#define TXT_FIRE      "ESPACIO = LANZAR"   /* titulo y game over */
+#define TXT_AGAIN     "PULSA BOTON"        /* titulo y game over */
+
 #define PAL_PADDLE_S  VC_SPPAL_0   /* pala: colores exactos del arte          */
 #define PAL_BALL_S    VC_SPPAL_1   /* bola: gris con bisel                    */
 #define PAL_CAPS_GOOD VC_SPPAL_2   /* capsulas buenas (verde/cian)            */
@@ -278,7 +286,6 @@ static void spr_palettes_set(void) {
 /* ===========================================================================
  * CONSTANTES DEL JUEGO
  * =========================================================================== */
-#define PADDLE_W      16    /* ancho de la pala en pixeles                    */
 #define PADDLE_H      8
 #define PADDLE_Y      206   /* Y fija de la pala (justo sobre el suelo)       */
 #define PADDLE_SPEED  4     /* pixeles por frame con el joystick/tecla        */
@@ -374,13 +381,20 @@ static int16_t  paddle_vx;      /* -1, 0, +1: direccion pedida */
 #define SPR_BALL2  13
 typedef struct {
     uint16_t x, y;        /* posicion Q8.8 (0..~0xDF00) */
-    uint16_t frac;        /* fraccion acumulada           */
-    uint8_t  dx, dy;      /* direccion (1 = der/abajo)    */
+    uint16_t frac_x;      /* fraccion acumulada del eje X */
+    uint16_t frac_y;      /* fraccion acumulada del eje Y */
+    int16_t  vx, vy;      /* VELOCIDAD por eje en Q8.8, CON SIGNO:
+                           *   el signo dice la direccion y el valor la rapidez.
+                           *   Asi el angulo del rebote no esta limitado a 45
+                           *   grados: cada eje lleva su propia velocidad.  */
     uint8_t  active;      /* 1 = en juego, 0 = inactiva   */
     uint8_t  stuck;       /* 1 = pegada a la pala (aun sin lanzar) */
 } ball_t;
 static ball_t balls[MAX_BALLS];
-static uint16_t ball_speed;          /* magnitud Q8.8 por frame (>= 0)      */
+/* Velocidad base del eje Y (magnitud Q8.8, sube con el nivel). Es la que fija el
+ * angulo: al rebotar en la pala solo cambia vx (segun la zona), vy se queda.
+ * No hay constante equivalente para el eje X: la pone paddle_zone_vx[]. */
+static int16_t  ball_vy;
 static uint8_t  balls_live;          /* bolas activas (para saber si se pierde vida) */
 
 /* Capsulas (power-ups) que caen. Se guardan como posicion entera (pixel) + tipo. */
@@ -930,17 +944,18 @@ static void paddle_reset(void) {
     uint8_t i;
     paddle_x  = (int16_t)((PLAY_X_MIN + PLAY_X_MAX - fx.paddle_w) / 2);
     paddle_vx = 0;
+    ball_set_speed();   /* velocidad del nivel (y efecto SLOW) ANTES de colocar la bola */
 
     for (i = 0; i < MAX_BALLS; i++) balls[i].active = 0;
     balls[0].active = 1;
     balls[0].x      = (uint16_t)(((uint16_t)paddle_x + (fx.paddle_w / 2) - (BALL_SIZE / 2)) << 8);
     balls[0].y      = (uint16_t)((uint16_t)(PADDLE_Y - BALL_SIZE) << 8);
-    balls[0].frac   = 0;               /* limpia la fraccion Q8.8 acumulada */
-    balls[0].dx     = 1;               /* sale hacia la derecha */
-    balls[0].dy     = 0;               /* ...y hacia arriba     */
+    balls[0].frac_x = 0;               /* limpia las fracciones Q8.8 acumuladas */
+    balls[0].frac_y = 0;
+    balls[0].vx     = ball_vy;              /* sale hacia la derecha... */
+    balls[0].vy     = (int16_t)(-ball_vy);  /* ...y hacia arriba (vy negativo) */
     balls[0].stuck  = 1;
     balls_live      = 1;
-    ball_set_speed();                  /* velocidad segun nivel (y efecto SLOW) */
 }
 
 /* Devuelve 1 si alguna bola esta pegada a la pala (stuck). */
@@ -962,30 +977,26 @@ static void ball_launch(void) {
  * angulos distintos (izquierda / derecha / recto). Salen disparadas al momento. */
 static void ball_split(void) {
     uint8_t i, n = 0;
-    uint8_t keeper = 0xFF;
-    ball_t base;
 
-    /* Busca la primera bola activa (la tomamos como base). */
-    for (i = 0; i < MAX_BALLS; i++) if (balls[i].active) { keeper = i; break; }
-    if (keeper == 0xFF) return;
-    base = balls[keeper];
-    base.stuck = 0;                 /* las nuevas salen volando */
+    ball_set_speed();             /* velocidad del nivel (y efecto SLOW) */
 
-    /* Activa hasta 3 bolas (la base + 2 copias). */
+    /* Activa hasta 3 bolas. El barrido de arriba abajo deja a balls[0] de base
+     * (siempre activa) y rellena los huecos de abajo: no hace falta buscar cual
+     * es la bola "principal". */
     for (i = 0; i < MAX_BALLS; i++) {
-        if (i == keeper) continue;
+        if (balls[i].active) continue;
         if (n >= 2) break;
-        balls[i] = base;
-        balls[i].active = 1;
-        /* Angulos: una hacia la izquierda, otra hacia la derecha. */
-        balls[i].dx = (uint8_t)(n == 0 ? 0 : 1);
-        balls[i].dy = 0;
-        balls[i].frac = 0;
+        balls[i]           = balls[0];      /* copia posicion y fracciones */
+        balls[i].active    = 1;
+        balls[i].stuck     = 0;             /* las copias salen volando  */
+        /* Angulos: una a la izquierda y otra a la derecha, con el MISMO angulo
+         * de 45 grados (|vx| = |vy| = ball_vy la primera vez que se recoge). */
+        balls[i].vx        = (int16_t)(n == 0 ? -ball_vy : ball_vy);
+        balls[i].vy        = (int16_t)(-ball_vy);
         n++;
     }
     /* La base tambien sale volando. */
-    balls[keeper].stuck = 0;
-    balls[keeper].frac  = 0;
+    balls[0].stuck = 0;
 
     balls_live = 0;
     for (i = 0; i < MAX_BALLS; i++) if (balls[i].active) balls_live++;
@@ -1021,15 +1032,15 @@ static void paddle_move(void) {
  * Asi las esquinas se resuelven solas (rebotan los dos ejes).
  * --------------------------------------------------------------------------- */
 
-/* Devuelve 1 si la celda (en pixeles absolutos) es solida (muro o ladrillo).
- * El suelo (FIELD_BOTTOM) NO es solido para la bola: si cae ahi, se pierde la
- * vida (la pared inferior es solo decorativa). */
-static uint8_t solid_px(uint16_t px, uint16_t py) {
+/* Celda solida en (px,py): distingue MURO de LADRILLO en una sola pasada
+ * (evita llamar otra vez a brick_at, que es lo que costaba codigo).
+ * Devuelve: 0 = libre, 1 = muro, 2 = ladrillo. */
+static uint8_t solid_kind(uint16_t px, uint16_t py) {
     uint8_t col = (uint8_t)(px >> 3);
     uint8_t row = (uint8_t)(py >> 3);
     if (col == FIELD_LEFT || col == FIELD_RIGHT) return 1;   /* muros laterales */
     if (row == FIELD_TOP) return 1;                          /* techo            */
-    return brick_at(col, row) ? 1 : 0;
+    return brick_at(col, row) ? 2 : 0;
 }
 
 /* Rompe el ladrillo de la celda (en pixeles). */
@@ -1041,8 +1052,58 @@ static void break_px(uint16_t px, uint16_t py) {
     }
 }
 
+/* ===========================================================================
+ * ANGULO DE REBOTE EN LA PALA (4 ZONAS)
+ * ===========================================================================
+ * La pala se divide en 4 tramos y cada uno lanza la bola con un angulo distinto:
+ * asi el jugador PUEDE DIRIGIRLA (que es lo que hace el Arkanoid arcade). El
+ * signo de vx sale de la tabla (izquierda negativa) y NO depende del azar: la
+ * misma zona da siempre el mismo angulo.
+ *
+ * La velocidad del eje Y la pone ball_vy (sube con el nivel), asi que el angulo
+ * se mantiene sea cual sea la velocidad: al rebotar solo cambia vx.
+ *
+ *   zona:  0 (punta izq)   1 (izq)   2 (der)   3 (punta der)
+ *   vx:   -abierto       -suave    +suave    +abierto
+ *
+ * Valores en Q8.8. Con ball_vy = 0x180 (1.5 px/f del nivel 1) los angulos son:
+ *   |vx| 0x0B0 -> 25 grados    |vx| 0x180 -> 45 grados
+ * OJO: los valores estan elegidos para que la velocidad total no se dispare
+ * (0x180 + 0x180 = 2.1 px/f en el peor caso, dentro del limite seguro).
+ * --------------------------------------------------------------------------- */
+#define PADDLE_ZONES 4
+static const int16_t paddle_zone_vx[PADDLE_ZONES] = {
+    -0x180,   /* zona 0: punta IZQUIERDA -> 45 grados a la izquierda */
+    -0x0B0,   /* zona 1: izquierda       -> 25 grados a la izquierda */
+     0x0B0,   /* zona 2: derecha         -> 25 grados a la derecha   */
+     0x180    /* zona 3: punta DERECHA   -> 45 grados a la derecha   */
+};
+
+/* NOTA: en el centro (zonas 1 y 2) la bola sale mas recta (25 grados) que en las
+ * puntas (45), asi que se ve algo mas lenta: es la rapidez TOTAL la que baja
+ * (1.65 px/f frente a 2.12), no el eje Y, que es igual en las 4 zonas. Se probo a
+ * igualar la rapidez subiendo tambien el eje Y del centro, pero el codigo de ese
+ * caso no cabia en RAM y ademas dejaba el nivel 5 por encima de BALL_SPEED_MAX.
+ * Se queda tal cual: las 4 zonas funcionan y el angulo de cada una es correcto. */
+
+/* Zona de golpe (0..3) para una distancia 'rel' desde la punta izquierda.
+ * En vez de dividir por el ancho (el '/' arrastraria las rutinas udiv/umod),
+ * se busca el tramo con una tabla: los valores de corte son (ancho/4)*1,2,3.
+ * ASCII ordenado, con los 2 anchos posibles (corta y normal dan lo mismo). */
+static const uint8_t zone_cut[PADDLE_ZONES - 1] = { 6, 12, 18 };
+static uint8_t paddle_zone(uint8_t rel) {
+    uint8_t z = 0;
+    while (z < PADDLE_ZONES - 1 && rel >= zone_cut[z]) z++;
+    return z;
+}
+
 /* Avanza la bola 'b' un frame completo (pasos de 1 pixel). Devuelve 1 si la bola ha
  * caido por debajo del campo (vida perdida para esa bola).
+ *
+ * FISICA DE VELOCIDAD POR EJE: la velocidad va en p->vx y p->vy (Q8.8 CON SIGNO).
+ * Cada eje lleva su propia rapidez, asi que el angulo NO esta limitado a 45
+ * grados: el rebote en la pala puede lanzar la bola a 23, 45 o 66 grados porque
+ * reparte la velocidad entre los dos ejes. El signo indica la direccion.
  *
  * IMPORTANTE (algoritmo): se comprueba el BORDE delantero de la bola (no solo
  * su centro), porque un sprite de 8x8 puede solapar dos celdas a la vez. Si se
@@ -1051,123 +1112,179 @@ static void break_px(uint16_t px, uint16_t py) {
 static uint8_t ball_step(uint8_t b) {
     ball_t *p = &balls[b];
     uint8_t  i;
-    /* Pixeles enteros por frame, mas los que arrastre la fraccion acumulada. */
-    uint8_t  steps;
+    /* Pasos de cada eje = parte entera + lo que arrastre la fraccion. */
+    uint8_t  steps_x, steps_y;
 
-    p->frac = (uint16_t)(p->frac + (ball_speed & 0xFF));
-    steps = (uint8_t)(ball_speed >> 8);
-    if (p->frac >= 0x100) {           /* la fraccion sumo un pixel entero */
-        steps = (uint8_t)(steps + 1);
-        p->frac = (uint16_t)(p->frac - 0x100);
+    /* --- Eje X --- */
+    p->frac_x = (uint16_t)(p->frac_x + (uint16_t)(p->vx & 0xFF));
+    /* OJO: los pasos salen de la MAGNITUD, no de (uint16_t)vx. Si vx es negativo,
+     * (uint16_t)vx tiene el bit de signo puesto y su byte alto da 0xFF -> 254
+     * pasos en un frame: la bola atravesaria el campo entero de una vez. */
+    steps_x = (uint8_t)(((uint16_t)((p->vx < 0) ? -p->vx : p->vx)) >> 8);
+    if (p->frac_x >= 0x100) {
+        steps_x = (uint8_t)(steps_x + 1);
+        p->frac_x = (uint16_t)(p->frac_x - 0x100);
     }
-    if (steps == 0) steps = 1;
+    /* --- Eje Y --- */
+    p->frac_y = (uint16_t)(p->frac_y + (uint16_t)(p->vy & 0xFF));
+    steps_y = (uint8_t)(((uint16_t)((p->vy < 0) ? -p->vy : p->vy)) >> 8);
+    if (p->frac_y >= 0x100) {
+        steps_y = (uint8_t)(steps_y + 1);
+        p->frac_y = (uint16_t)(p->frac_y - 0x100);
+    }
 
-    for (i = 0; i < steps; i++) {
-        uint16_t x = (uint16_t)(p->x >> 8);   /* esquina sup-izq (px) */
-        uint16_t y = (uint16_t)(p->y >> 8);
-        int16_t  newx = (int16_t)(p->dx ? x + 1 : x - 1);
-        int16_t  newy = (int16_t)(p->dy ? y + 1 : y - 1);
+    /* El bucle corre tantas veces como el eje MAS rapido necesite; el otro solo
+     * avanza mientras le queden pasos (asi se desacopla la velocidad por eje). */
+    {
+        uint8_t total = (steps_x > steps_y) ? steps_x : steps_y;
+        uint8_t sx = steps_x, sy = steps_y;
+        if (total == 0) total = 1;
 
-        /* Bordes de la bola (según su nueva posicion candidata). */
-        int16_t  lx = newx;                          /* borde izquierdo */
-        int16_t  rx = (int16_t)(newx + BALL_SIZE - 1); /* borde derecho   */
-        int16_t  ty = newy;                          /* borde superior  */
-        int16_t  byy = (int16_t)(newy + BALL_SIZE - 1);/* borde inferior */
-        int16_t  cx = (int16_t)(x + BALL_SIZE / 2);  /* centro (x)      */
-        int16_t  cy = (int16_t)(y + BALL_SIZE / 2);  /* centro (y)      */
+        for (i = 0; i < total; i++) {
+            uint16_t x = (uint16_t)(p->x >> 8);   /* esquina sup-izq (px) */
+            uint16_t y = (uint16_t)(p->y >> 8);
+            /* Al rebotar en la pala se SALE del bucle ('done'): el impacto ya
+             * consume el frame. Sin esto, el paso del eje X que sigue probaria
+             * otra vez la pala (la bola esta apoyada en ella) y volveria a
+             * rebotar: la bola se "bailaba" encima de la pala sin salir. */
+            uint8_t  done = 0;
+            /* Borde central (Y) de la bola. Las esquinas delanteras se calculan
+             * JUSTO ANTES de cada test, porque el signo de vx/vy puede haber
+             * cambiado en el test anterior (y con el, hacia donde esta "delante"). */
+            int16_t  cx = (int16_t)(x + BALL_SIZE / 2);  /* centro (x)      */
+            int16_t  cy = (int16_t)(y + BALL_SIZE / 2);  /* centro (y)      */
+            int16_t  newx, newy, lx, rx, ty, byy;
 
-        /* --- Eje X: mira el borde delantero --- */
-        {
-            int16_t edge_x = (int16_t)(p->dx ? rx : lx);
-            if (solid_px((uint16_t)edge_x, (uint16_t)cy)) {
-                if (brick_at((uint8_t)(edge_x >> 3), (uint8_t)(cy >> 3))) {
-                    break_px((uint16_t)edge_x, (uint16_t)cy);
-                    if (!fx.brk) {              /* con BREAK atraviesa el ladrillo */
-                        p->dx = (uint8_t)(!p->dx);
+            /* ============================================================
+             * Eje X: solo se prueba si este eje tiene paso pendiente.
+             * solid_kind distingue muro (1) de ladrillo (2) en una pasada.
+             * ============================================================ */
+            if (sx) {
+                /* El signo se lee AQUI (no antes), para que un rebote en X del
+                 * test anterior no deje el borde delantero mirando al lado
+                 * contrario. */
+                newx = (int16_t)((p->vx >= 0) ? x + 1 : x - 1);
+                lx = newx; rx = (int16_t)(newx + BALL_SIZE - 1);
+                {
+                int16_t edge_x = (int16_t)((p->vx >= 0) ? rx : lx);
+                uint8_t kx = solid_kind((uint16_t)edge_x, (uint16_t)cy);
+                if (kx) {
+                    if (kx == 2) break_px((uint16_t)edge_x, (uint16_t)cy);
+                    else         snd_wall();
+                    if (kx == 1 || !fx.brk) {   /* muro siempre rebota; el
+                                                 * ladrillo solo sin BREAK */
+                        p->vx = (int16_t)(-p->vx);
                         newx = (int16_t)x;
                         lx = newx; rx = (int16_t)(newx + BALL_SIZE - 1);
                     }
-                } else {
-                    snd_wall();
-                    p->dx = (uint8_t)(!p->dx);
-                    newx = (int16_t)x;
-                    lx = newx; rx = (int16_t)(newx + BALL_SIZE - 1);
+                }
                 }
             }
-        }
 
-        /* --- Eje Y: mira el borde delantero, en AMBOS bordes horizontales --- */
-        {
-            int16_t edge_y = (int16_t)(p->dy ? byy : ty);
-            uint8_t hitL = solid_px((uint16_t)lx, (uint16_t)edge_y);
-            uint8_t hitR = solid_px((uint16_t)rx, (uint16_t)edge_y);
-            if (hitL || hitR) {
-                uint16_t hx = (uint16_t)(hitL ? lx : rx);
-                if (brick_at((uint8_t)(hx >> 3), (uint8_t)(edge_y >> 3))) {
-                    break_px(hx, (uint16_t)edge_y);
-                    if (!fx.brk) {              /* con BREAK pasa de largo */
-                        p->dy = (uint8_t)(!p->dy);
+            /* ============================================================
+             * Eje Y (borde delantero, en AMBOS bordes horizontales)
+             * ============================================================ */
+            if (sy) {
+                newy = (int16_t)((p->vy >= 0) ? y + 1 : y - 1);
+                ty = newy; byy = (int16_t)(newy + BALL_SIZE - 1);
+                {
+                int16_t edge_y = (int16_t)((p->vy >= 0) ? byy : ty);
+                uint8_t kL = solid_kind((uint16_t)lx, (uint16_t)edge_y);
+                uint8_t kR = kL ? 0 : solid_kind((uint16_t)rx, (uint16_t)edge_y);
+                uint8_t ky = kL ? kL : kR;
+                if (ky) {
+                    uint16_t hx = (uint16_t)(kL ? lx : rx);
+                    if (ky == 2) break_px(hx, (uint16_t)edge_y);
+                    else         snd_wall();
+                    if (ky == 1 || !fx.brk) {
+                        p->vy = (int16_t)(-p->vy);
                         newy = (int16_t)y;
                         ty = newy; byy = (int16_t)(newy + BALL_SIZE - 1);
                     }
-                } else {
-                    snd_wall();
-                    p->dy = (uint8_t)(!p->dy);
-                    newy = (int16_t)y;
-                    ty = newy; byy = (int16_t)(newy + BALL_SIZE - 1);
+                }
                 }
             }
-        }
 
-        /* --- Pala (solo si la bola baja). Solape AABB estricto. --- */
-        if (p->dy) {
-            if ((uint16_t)(byy + 1) > PADDLE_Y && (uint16_t)ty < (PADDLE_Y + PADDLE_H) &&
-                (uint16_t)(rx + 1) > (uint16_t)paddle_x &&
-                (uint16_t)lx < (uint16_t)(paddle_x + fx.paddle_w)) {
-                int16_t rel;
-                if (fx.catch) {
-                    /* CATCH: la pala atrapa la bola (se queda pegada hasta
-                     * volver a lanzarla). */
-                    p->stuck = 1;
-                    p->dy = 0;               /* al lanzar, saldra hacia arriba */
+            /* ============================================================
+             * Pala (solo si la bola baja). Solape AABB estricto.
+             *
+             * OJO: el rebote NO consume el paso del eje Y. Si se dejase 'sy'
+             * pendiente, el siguiente paso volveria a probar la pala (la bola
+             * sigue solapandola) y rebotaria varias veces seguidas hasta salir
+             * por el lado: la bola "nunca es capturada por la pala". Por eso se
+             * cancela el paso (sy = 0) y se sale del bucle.
+             * ============================================================ */
+            if (newy >= 0 && p->vy > 0) {
+                int16_t pl = (int16_t)(newy + BALL_SIZE - 1);   /* borde de abajo */
+                if ((uint16_t)(pl + 1) > PADDLE_Y && (uint16_t)newy < (PADDLE_Y + PADDLE_H) &&
+                    (uint16_t)(rx + 1) > (uint16_t)paddle_x &&
+                    (uint16_t)lx < (uint16_t)(paddle_x + fx.paddle_w)) {
+                    if (fx.catch) {
+                        /* CATCH: la pala atrapa la bola (se queda pegada hasta
+                         * volver a lanzarla). */
+                        p->stuck = 1;
+                        p->vy = 0;               /* al lanzar, saldra hacia arriba */
+                        p->y = (uint16_t)((uint16_t)(PADDLE_Y - BALL_SIZE) << 8);
+                        snd_wall();
+                        return 0;
+                    }
+                    /* Zona de golpe: 0..3 de izquierda a derecha. El reves X de la
+                     * pala no afecta (fx.paddle_w es el ancho real). */
+                    {
+                        int16_t rel = (int16_t)((lx + BALL_SIZE / 2) - (int16_t)paddle_x);
+                        uint8_t zone;
+                        if (rel < 0) rel = 0;
+                        zone = paddle_zone((uint8_t)rel);
+                        /* Velocidad por eje segun la zona (el signo de vx sale
+                         * de la tabla: izquierda negativa, derecha positiva).
+                         * En el CENTRO (zonas 1 y 2) el eje Y tambien sube, para
+                         * que la rapidez total sea la misma que en las puntas y
+                         * no se vea "lento" (el angulo no cambia). */
+                        p->vx = paddle_zone_vx[zone];
+                        p->vy = (int16_t)(-ball_vy);   /* hacia arriba (negativo) */
+                    }
+                    /* La bola queda APOYADA ENCIMA de la pala (su borde inferior
+                     * roza PADDLE_Y), sin solaparla: si se dejase a la altura de
+                     * PADDLE_Y se veria metida 6 px dentro de la pala.
+                     * El 'done' de abajo ya evita que vuelva a rebotar en el mismo
+                     * frame, asi que no hace falta colarla dentro. */
                     p->y = (uint16_t)((uint16_t)(PADDLE_Y - BALL_SIZE) << 8);
                     snd_wall();
-                    return 0;
+                    done = 1;        /* el impacto consume el frame: fuera del bucle */
+                    break;
                 }
-                /* Angulo segun el punto de golpe (borde izq -> izquierda). */
-                rel = (int16_t)((lx + BALL_SIZE / 2) -
-                                ((uint16_t)paddle_x + (fx.paddle_w / 2)));
-                p->dy = 0;                 /* hacia arriba */
-                if (rel <= -2)      p->dx = 0;
-                else if (rel >= 2)  p->dx = 1;
-                else                p->dx = (uint8_t)(rng_next() & 1);
-                p->y = (uint16_t)((uint16_t)(PADDLE_Y - BALL_SIZE) << 8);
-                snd_wall();
-                break;
             }
-        }
 
-        /* --- Aplica el movimiento (ya saneado) --- */
-        p->x = (uint16_t)(p->dx ? (p->x + 0x100) : (p->x - 0x100));
-        p->y = (uint16_t)(p->dy ? (p->y + 0x100) : (p->y - 0x100));
+            /* --- Aplica el movimiento de los ejes que tengan paso --- */
+            if (sx) {
+                p->x = (uint16_t)((p->vx >= 0) ? (p->x + 0x100) : (p->x - 0x100));
+                sx--;
+            }
+            if (sy) {
+                p->y = (uint16_t)((p->vy >= 0) ? (p->y + 0x100) : (p->y - 0x100));
+                sy--;
+            }
 
-        /* --- Red de seguridad: la bola NUNCA puede salir del campo por los
-         * lados ni por arriba, pase lo que pase en la deteccion de colision.
-         * Los limites ya estan elegidos para que su Q8.8 (<<8) no desborde. --- */
-        if ((p->x >> 8) < PLAY_X_MIN) {
-            p->x = (uint16_t)((uint16_t)PLAY_X_MIN << 8);
-            p->dx = 1;
-        } else if ((p->x >> 8) > BALL_X_MAX) {
-            p->x = (uint16_t)((uint16_t)BALL_X_MAX << 8);
-            p->dx = 0;
-        }
-        if ((p->y >> 8) < PLAY_Y_MIN) {
-            p->y = (uint16_t)((uint16_t)PLAY_Y_MIN << 8);
-            p->dy = 1;
-        }
+            /* --- Red de seguridad: la bola NUNCA puede salir del campo por los
+             * lados ni por arriba, pase lo que pase en la deteccion de colision. */
+            if ((p->x >> 8) < PLAY_X_MIN) {
+                p->x = (uint16_t)((uint16_t)PLAY_X_MIN << 8);
+                p->vx = (int16_t)((p->vx < 0) ? -p->vx : p->vx);
+            } else if ((p->x >> 8) > BALL_X_MAX) {
+                p->x = (uint16_t)((uint16_t)BALL_X_MAX << 8);
+                p->vx = (int16_t)((p->vx > 0) ? -p->vx : p->vx);
+            }
+            if ((p->y >> 8) < PLAY_Y_MIN) {
+                p->y = (uint16_t)((uint16_t)PLAY_Y_MIN << 8);
+                p->vy = (int16_t)((p->vy < 0) ? -p->vy : p->vy);
+            }
 
-        /* --- Fuera por abajo: esta bola se pierde --- */
-        if ((p->y >> 8) > PLAY_Y_MAX) return 1;
+            /* --- Fuera por abajo: esta bola se pierde --- */
+            if ((p->y >> 8) > PLAY_Y_MAX) return 1;
+
+            /* Rebote en la pala: el impacto ya gasto el frame. */
+            if (done) break;
+        }
     }
     return 0;
 }
@@ -1175,13 +1292,18 @@ static uint8_t ball_step(uint8_t b) {
 /* ===========================================================================
  * VELOCIDAD DE LA BOLA SEGUN EL NIVEL
  * ===========================================================================
- * Magnitud Q8.8 por eje; sube con el nivel. La direccion la llevan ball_dx/dy.
+ * Magnitud Q8.8 del eje Y; sube con el nivel. El eje X lo fija la zona de la
+ * pala (paddle_zone_vx), asi que aqui no hay constante equivalente.
  * =========================================================================== */
 static void ball_set_speed(void) {
+    int16_t base;
     uint16_t extra = (uint16_t)((level > 1 ? (level - 1) : 0) * BALL_SPEED_INC);
-    ball_speed = (uint16_t)(BALL_SPEED_L1 + extra);
-    if (ball_speed > BALL_SPEED_MAX) ball_speed = BALL_SPEED_MAX;
-    if (fx.slow) ball_speed = (uint16_t)(ball_speed / 2);   /* efecto SLOW */
+    base = (int16_t)(BALL_SPEED_L1 + extra);
+    if (base > (int16_t)BALL_SPEED_MAX) base = (int16_t)BALL_SPEED_MAX;
+    if (fx.slow) base = (int16_t)(base / 2);         /* efecto SLOW */
+    /* Velocidad del eje Y: fija el angulo del rebote. El eje X lo pone la zona
+     * de la pala (paddle_zone_vx), asi que no guarda ninguna constante. */
+    ball_vy = base;
 }
 
 /* ===========================================================================
@@ -1485,34 +1607,22 @@ static uint8_t start_pressed(void) {
 }
 
 static uint8_t title_screen(void) {
-    uint8_t x;
-
     vc_wait_vblank();
     sprites_hide();          /* por si acaso: arranca sin sprites visibles */
     screen_clear();
 
-    put_str_pal(12, 6, "A R K A N O I D", PAL_TITLE);
+    put_str_pal(14, 6, "A R K A N O I D", PAL_TITLE);
 
-    /* Muestra algunos ladrillos (16x8 = mitad izq + mitad der) de adorno. */
-    for (x = 0; x < 6; x++) {
-        uint8_t cx = (uint8_t)(12 + x * 2);
-        paint(cx, 11, TILE_BRICK_L, PAL_BRICK_0);
-        paint((uint8_t)(cx + 1), 11, TILE_BRICK_R, PAL_BRICK_0);
-        paint(cx, 12, TILE_BRICK_L, PAL_BRICK_1);
-        paint((uint8_t)(cx + 1), 12, TILE_BRICK_R, PAL_BRICK_1);
-    }
+    /* Ayuda: se reutilizan las MISMAS cadenas en todas las pantallas (cc65
+     * deduplica literales identicos, asi que cada texto distinto ocupa una vez). */
+    put_str_pal(10, 16, "A/D = MOVER", PAL_TEXT);
+    put_str_pal(10, 18, TXT_FIRE, PAL_TEXT);
 
-    put_str_pal(9, 16, "A/D o joystick = mover", PAL_TEXT);
-    put_str_pal(9, 18, "ESPACIO = lanzar bola", PAL_TEXT);
-
-    /* Pala y bola de adorno (sprites). */
+    /* Pala de adorno (sprites). La bola NO se dibuja en el titulo: en una
+     * pantalla sin juego se veia raro y solo gastaba codigo. */
     fx_reset();
     paddle_x = (int16_t)((VC_SCREEN_W / 2) - (fx.paddle_w / 2));
-    balls[0].active = 1;
-    balls[0].x = (uint16_t)(((uint16_t)(VC_SCREEN_W / 2) - (BALL_SIZE / 2)) << 8);
-    balls[0].y = (uint16_t)((uint16_t)(PADDLE_Y - BALL_SIZE) << 8);
     paddle_draw();
-    ball_draw();
 
     vc_wait_vblank_end();
 
@@ -1526,13 +1636,12 @@ static uint8_t title_screen(void) {
 
             vc_wait_vblank();
             if (on != shown) {
-                if (on) clear_str_at(14, 21, 11);
-                else    put_str_pal(14, 21, "PULSA BOTON", PAL_TITLE);
+                if (on) clear_str_at(15, 21, 9);
+                else    put_str_pal(15, 21, TXT_AGAIN, PAL_TITLE);
                 shown = on;
             }
-            /* Recoloca los sprites de adorno cada frame. */
+            /* Recoloca la pala de adorno cada frame. */
             paddle_draw();
-            ball_draw();
             hold++;
             vc_wait_vblank_end();
 
@@ -1640,7 +1749,9 @@ int main(void) {
             put_str_pal(15, 8, "GAME OVER", PAL_TITLE);
             put_str_at(14, 11, "PUNTOS:");
             put_u16_at(21, 11, score, 5);
-            put_str_at(10, 16, "BOTON/R = reiniciar");
+            /* Ayuda: se reutilizan las MISMAS cadenas del titulo (ahorra RODATA). */
+            put_str_at(10, 16, TXT_AGAIN);
+            put_str_at(10, 18, TXT_FIRE);
             vc_wait_vblank_end();
             rom_uart_puts("\r\nGAME OVER - BOTON/R = jugar de nuevo, Q = salir\r\n");
 

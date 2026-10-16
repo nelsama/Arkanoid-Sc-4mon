@@ -94,17 +94,22 @@ o cian (paleta 2) según la **paleta de la celda**, sin cambiar el patrón.
 
 ---
 
-## 4. Pala y bola: 3 sprites
+## 4. Pala y bola: sprites
 
 | Sprite (OAM) | Objeto | Patrón |
 |---|---|---|
-| 0 | pala, mitad izquierda | `spr_paddle_l_*` |
-| 1 | pala, mitad derecha   | `spr_paddle_r_*` |
-| 2 | bola (círculo 4×4)    | `spr_ball_*` |
+| 0, 1, 3, 4 | pala (hasta 4 trozos de 8 px) | `spr_paddle_l_*`, `spr_paddle_mid_*` |
+| 2, 12, 13 | bolas (hasta 3 por el multi-bola) | `spr_ball_*` |
+| 3, 4 * | cápsulas (hasta 2) | `caps_*_p0/p1` |
 
-La pala son dos sprites de 8×8 contiguos en X (16 px en total). Se **redibujan
-cada frame dentro del VBLANK** (`paddle_draw()`, `ball_draw()`): si no, podrían
-perderse o salir partidos (ver §3.4 de las trampas).
+La pala son varios sprites de 8×8 contiguos en X: **24 px por defecto** (3 trozos),
+16 px encogida (2) y 32 px extendida (4). Se **redibujan cada frame dentro del
+VBLANK** (`paddle_draw()`, `ball_draw()`): si no, podrían perderse o salir partidos
+(ver §3.4 de las trampas).
+
+> \* La pala y las cápsulas comparten los slots 3 y 4 (OAM 11 y 15 son las otras
+dos de la pala). No coinciden en la misma línea: las cápsulas solo existen dentro
+del campo y la pala está en `PADDLE_Y`.
 
 ---
 
@@ -112,15 +117,16 @@ perderse o salir partidos (ver §3.4 de las trampas).
 
 ### Representación
 
-- Posición: `ball_x`, `ball_y` en **Q8.8** dentro de `uint16_t` (parte entera en
-  el byte alto). Evita el Q8.8 con signo, que en cc65 produce avisos de
-  desbordamiento con literales como `0xFF00`.
-- Dirección: `ball_dx` (1 = derecha, 0 = izquierda), `ball_dy` (1 = abajo,
-  0 = arriba).
-- Velocidad: `ball_speed` = **magnitud** Q8.8 por eje. `ball_set_speed()` la fija
-  según el nivel: `1.00 px/frame` en el nivel 1, `+0.25` por nivel (tope 3.00).
+- Posición: `balls[i].x`, `balls[i].y` en **Q8.8** dentro de `uint16_t` (parte
+  entera en el byte alto). Se usa `uint16_t` y velocidades con signo en `int16_t`,
+  en vez de Q8.8 con signo, que en cc65 produce avisos con literales como `0xFF00`.
+- Velocidad: `balls[i].vx` / `balls[i].vy` en **Q8.8 CON SIGNO**. El signo es la
+  dirección y el valor la rapidez, así que **cada eje lleva su propia velocidad** y
+  el ángulo no está limitado a 45°. `ball_vy` (global) es la magnitud del eje Y
+  según el nivel: `1.50 px/frame` en el nivel 1, `+0.50` por nivel (tope 3.50).
+  El eje X lo fija la zona de la pala (`paddle_zone_vx[]`).
 
-### Avance por pasos de 1 píxel (colisión por **borde**) —
+### Avance por pasos de 1 píxel (colisión por **borde**)
 
 Un sprite de 8×8 puede solapar **dos celdas a la vez**. Si se comprobase solo el
 **centro** de la bola, esta se metería en el muro antes de rebotar y parecería
@@ -129,42 +135,55 @@ la dirección del movimiento (y, en vertical, los **dos** bordes horizontales, p
 no colarse entre dos ladrillos):
 
 ```
-steps = ball_speed >> 8   (+1 si la fraccion acumulada llega a 0x100)
+steps_x = vx >> 8   (+1 si la fraccion_x acumulada llega a 0x100)
+steps_y = vy >> 8   (+1 si la fraccion_y acumulada llega a 0x100)
+total   = max(steps_x, steps_y)  (minimo 1)
 
-repetir 'steps' veces:
+repetir 'total' veces:
     x,y = esquina sup-izq de la bola
-    lx = x ; rx = x+7 ; ty = y ; byy = y+7    (bordes)
-    cx = x+4 ; cy = y+4                        (centro)
+    lx = x ; rx = x+5 ; ty = y ; byy = y+5    (bordes)
+    cy = y+3                                   (centro en Y)
 
-    # Eje X: mira el borde delantero (rx si va a la derecha, lx si a la izq.)
-    si SOLIDO(borde_delantero_x, cy):
-        romper ladrillo / sonido rebote ; dx = !dx
+    # Eje X (solo si le quedan pasos)
+    si SOLIDA(borde_delantero_x, cy):
+        romper ladrillo / sonido rebote ; vx = -vx
 
-    # Eje Y: mira el borde delantero en AMBOS bordes horizontales
-    si SOLIDO(lx, borde_delantero_y) o SOLIDO(rx, borde_delantero_y):
-        romper ladrillo / sonido rebote ; dy = !dy
+    # Eje Y (solo si le quedan pasos): borde delantero en AMBOS bordes horizontales
+    si SOLIDA(lx, borde_delantero_y) o SOLIDA(rx, borde_delantero_y):
+        romper ladrillo / sonido rebote ; vy = -vy
 
-    si dy (bajando) y solapa la pala (AABB estricto):
-        dy = 0 ; dx = segun el punto de golpe ; break
+    si vy > 0 (bajando) y solapa la pala (AABB estricto):
+        vy = -ball_vy ; vx = paddle_zone_vx[zona] ; break
 
-    aplicar movimiento (±1 px)
+    aplicar movimiento (±1 px) en los ejes que tengan paso
     CLAMP: si la bola salio del campo por los lados/arriba, se reposiciona
     si fuera por abajo -> fin (vida perdida)
 ```
 
-- `solid_px(px,py)` es **sólida** si es el muro izquierdo/derecho, el techo, o un
-  ladrillo.
+- `solid_kind(px,py)` devuelve **0 = libre, 1 = muro, 2 = ladrillo** en una sola
+  pasada (distingue muro de ladrillo sin volver a llamar a `brick_at`).
 - La comprobación **separada por ejes** resuelve las esquinas: si toca un ladrillo
   en diagonal, rebota en X y en Y, y lo rompe.
 - El **clamp** final es una red de seguridad: pase lo que pase en la detección,
   la bola nunca abandona el campo por los lados ni por arriba.
 
-### Ángulo al golpear la pala
+### Ángulo al golpear la pala (4 zonas)
 
-Se calcula la posición relativa del centro de la bola respecto al centro de la
-pala. Borde izquierdo → sale hacia la izquierda; borde derecho → a la derecha. Un
-golpe muy centrado sale en un ángulo al azar (evita que la bola se quede
-"vertical" rebotando sola sin salir nunca).
+La pala se divide en **4 tramos** y cada uno lanza la bola con un ángulo distinto,
+así el jugador puede **dirigirla** (como en el Arkanoid arcade). **No hay azar**:
+la misma zona da siempre el mismo ángulo.
+
+| Zona | Tramo (pala de 24 px) | `vx` | Ángulo (con `ball_vy` del nivel 1) |
+|---|---|---|---|
+| 0 | punta derecha → punta izq. | `-0x180` | 45° a la izquierda |
+| 1 | centro-izquierda | `-0x0B0` | 25° a la izquierda |
+| 2 | centro-derecha | `+0x0B0` | 25° a la derecha |
+| 3 | punta derecha | `+0x180` | 45° a la derecha |
+
+El tramo se elige con la tabla `zone_cut[]` (`{6, 12, 18}`) en lugar de dividir
+por el ancho de la pala: el `/` habría arrastrado las rutinas `udiv`/`umod` de 16
+bits, que no caben en RAM. Al rebotar en la pala **solo cambia `vx`**: `vy` se
+fija a `-ball_vy`, de modo que el ángulo se mantiene a cualquier velocidad.
 
 ---
 
@@ -190,8 +209,8 @@ main()
 
 ### Estados dentro de `play_level()`
 
-- `ball_stuck` = 1: la bola sigue pegada a la pala (se mueve con ella). Se lanza
-  con botón/ESPACIO o sola tras `AUTOLAUNCH_FRAMES`.
+- `balls[i].stuck` = 1: la bola sigue pegada a la pala (se mueve con ella). Se
+  lanza con botón/ESPACIO.
 - `bricks_left` = 0 → nivel superado (`level_clear`).
 - La bola cae por abajo → `lives--`; si llega a 0 → `game_over`, si no, se
   recoloca con `paddle_reset()`.

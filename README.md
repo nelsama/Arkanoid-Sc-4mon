@@ -35,8 +35,9 @@ Si no la lanzas, sale sola pasados unos segundos.
 - **Vidas a 0 → GAME OVER.** Pulsa el botón (o `R`) para reiniciar, `Q` para salir.
 - **Puntuación:** 10 puntos por ladrillo.
 - **Niveles:** al limpiar el tablero subes de nivel (hasta 9) y la bola **acelera**.
-- **Ángulo:** el rebote en la pala cambia según el punto de golpe (borde izquierdo
-  → sale hacia la izquierda, borde derecho → hacia la derecha).
+- **Ángulo:** el rebote en la pala cambia según el **punto de golpe**, que se
+divide en **4 zonas**: las dos puntas lanzan a 45° hacia su lado y las dos zonas
+  centrales a 25°. Así la bola se puede **dirigir**, como en el Arkanoid arcade.
 
 ---
 
@@ -50,12 +51,12 @@ fila → no caben como sprites. Por eso:
 
 - **Ladrillos → tiles** del tilemap (`vc_put_cell`), cada ladrillo de **2 tiles**
   de ancho (como el original).
-- **Pala (16×8) y bola (6×6) → 3 sprites** (OAM 0-1 para las dos mitades de la
-  pala, OAM 2 para la bola): son pocos, móviles y con movimiento fino pixel a
-  pixel. La bola se dibuja dentro de un tile de 8×8 (círculo de 6×6 centrado,
-  desplazado 1 px), pero su **hitbox es de 6×6** para que coincida con lo visible.
-  La bola lleva un **bisel tipo esfera** (3 tonos de gris: blanco arriba-izq.,
-  gris medio, gris oscuro abajo-der.) para dar volumen 3D.
+- **Pala (24×8 normal) y bola (6×6) → sprites** (OAM 0/1/11/15 para los trozos de
+  la pala, OAM 2/12/13 para las bolas): son pocos, móviles y con movimiento fino
+  píxel a píxel. La bola se dibuja dentro de un tile de 8×8 (círculo de 6×6
+  centrado, desplazado 1 px), pero su **hitbox es de 6×6** para que coincida con lo
+  visible. La bola lleva un **bisel tipo esfera** (3 tonos de gris: blanco
+  arriba-izq., gris medio, gris oscuro abajo-der.) para dar volumen 3D.
 
 ### El estado vive en RAM, no se lee la VRAM
 
@@ -65,15 +66,22 @@ array `board[]`, Arkanoid guarda el estado de los ladrillos en
 bola es **en software** contra ese array. Cada ladrillo = 2 celdas: al romperlo se
 borran **ambas** celdas de golpe (un impacto rompe el ladrillo entero).
 
-### Física de la bola (Q8.8 + colisión por borde)
+### Física de la bola (velocidad por eje + colisión por borde)
 
 La bola lleva la posición con 8 bits enteros + 8 de fracción (Q8.8) en `uint16_t`
-y la dirección en flags separados (`ball_dx`/`ball_dy`) para no pelear con el
-Q8.8 con signo en cc65. La velocidad es una **magnitud** Q8.8 que sube por nivel.
+y la velocidad **por eje** en `vx`/`vy`, también Q8.8 pero **con signo**: el signo
+es la dirección y el valor la rapidez. Al no compartir una única velocidad, el
+**ángulo no está limitado a 45°**: cada eje lleva la suya y el rebote en la pala
+puede salir a 25°, 45° o recto, según la zona golpeada.
 
-Cada frame se avanza el número de **pasos de 1 píxel** que indique la velocidad.
-En cada paso se prueba el **borde delantero** de la bola (no solo el centro, para
-que una bola pequeña no se cuele en el muro), por separado:
+La velocidad del eje Y (`ball_vy`) sube con el nivel y **no cambia al rebotar en
+la pala**: solo se reescribe `vx` según la zona. Así el ángulo se mantiene a
+cualquier velocidad.
+
+Cada frame se avanza el número de **pasos de 1 píxel** que indique cada eje (el
+bucle corre tantas veces como el eje más rápido; el otro solo avanza mientras le
+queden pasos). En cada paso se prueba el **borde delantero** de la bola (no solo
+el centro, para que una bola pequeña no se cuele en el muro), por separado:
 
 - el borde **en X** → rebote en X (rompe ladrillo o rebota en el muro),
 - el borde **en Y** (en los dos bordes horizontales) → rebote en Y.
@@ -87,8 +95,9 @@ técnica clásica de breakout, adaptada al sprite de 8×8.
 > llegar a 256: `256 << 8` da `0x10000`, que **desborda a 0** en `uint16_t` y la
 > bola saltaría al lado izquierdo. Por eso el muro derecho está en la columna 32
 > (píxel 255 es el máximo interior) y `BALL_X_MAX = 250`.
-> `tools/test_ball.py` simula la física en el PC y comprueba que `ball_x` se queda
-> siempre en `[64, 250]`.
+> `tools/test_ball.py` simula la física en el PC con las **velocidades por eje**
+> que genera el juego (45°, 25° y recto, en los 9 niveles) y comprueba que
+> `ball_x` se queda siempre en `[64, 250]`.
 
 ### Presupuesto de recursos
 
@@ -96,14 +105,13 @@ técnica clásica de breakout, adaptada al sprite de 8×8.
 |---|---|---|
 | Sprites (OAM) | 32 (máx. **8 por línea**) | pala 4 + 3 bolas + 2 cápsulas + 2 rayos |
 | Patrones de fondo | 256 (fuente en `$20`-`$7F`) | 4 (muro + 2 mitad de ladrillo + fuente) |
-| Patrones de sprite | 64 | 14 (pala, bola, cápsulas, rayo) |
+| Patrones de sprite | 64 | 15 (pala ×3, bola, cápsulas ×8, rayo ×2 usos) |
 | Ladrillos | 13×5 = 65 (2 celdas c/u) | array en RAM (65 bytes) |
-| RAM | `$0800-$3EFF` (~13.75 KB) | holgado (`BSS` acaba en `$3E4E`, ~210 bytes libres) |
+| RAM | `$0800-$3EFF` (~13.75 KB) | `BSS` acaba en `$3E40` → **~190 bytes libres** |
 
-> ⚠️ La RAM del proyecto va **ajustada** (~210 bytes libres). Cualquier cosa nueva
-> hay que "pagarla" quitando otra: medir siempre con
-> `python tools/fn_sizes.py build/game.lst` (tamaño por función) y con
-> `make map`. Mitigaciones que ya se usaron aquí:
+> ⚠️ La RAM del proyecto va **ajustada**. Cualquier cosa nueva hay que "pagarla"
+> quitando otra: medir siempre con `python tools/fn_sizes.py build/game.lst`
+> (tamaño por función) y con `make map`. Mitigaciones que ya se usaron aquí:
 >
 > - Desenrollar tablas `const` a código; usar literales en `put_str_pal` (evita
 >   arrastrar `memcpy`); sustituir `%` por divisiones con constante (evita
@@ -112,8 +120,10 @@ técnica clásica de breakout, adaptada al sprite de 8×8.
 ### Prueba de la física (PC)
 
 `tools/test_ball.py` reproduce en Python la aritmética Q8.8 de `ball_step()` y
-simula miles de frames con todas las direcciones y niveles, verificando que la bola
-nunca sale del campo. Útil porque el juego no se puede ejecutar sin hardware:
+simula miles de frames con las **velocidades por eje** que produce el juego
+(rebote en las puntas = 45°, rebote suave = 25°, esquina = recto) en los 9
+niveles, verificando que la bola nunca sale del campo. Útil porque el juego no se
+puede ejecutar sin hardware:
 
 ```bash
 python tools/test_ball.py
