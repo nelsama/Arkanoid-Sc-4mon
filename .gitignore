@@ -1,0 +1,25 @@
+# ============================================================================
+# .gitignore - Arkanoid (core de video 6502 / cc65)
+# ============================================================================
+# Se ignoran los artefactos de compilacion y los ficheros temporales de las
+# herramientas. El binario final (output/game.bin) SI se ignora: se reconstruye
+# con `make` y no conviene versionar binarios que cambian en cada compilacion.
+# ============================================================================
+
+# Artefactos de compilacion
+build/
+output/
+*.o
+*.lst
+*.map
+*.prg
+*.bin
+
+# Binarios de la biblioteca (se copian del proyecto videocore-6502-cc65)
+# NOTA: lib/vc.lib NO se ignora a proposito: el proyecto es autonomo y se
+# compila sin depender de la ruta del videocore.
+
+# Temporales de herramientas
+*.tmp
+__pycache__/
+*.pyc
