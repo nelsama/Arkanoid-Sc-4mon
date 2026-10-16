@@ -31,7 +31,7 @@ def capsule(ch):
             if not inside:
                 row += ' '
                 continue
-            rr, cc = r - 1, c - 3
+            rr, cc = r - 2, c - 3
             lit = (0 <= rr < 5 and 0 <= cc < 3 and LETTERS[ch][rr][cc] == '1')
             border = (r in (1, 6)) or (c in (0, 7))
             row += '#' if (lit or border) else '='

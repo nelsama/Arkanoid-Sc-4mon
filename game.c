@@ -153,15 +153,15 @@ static const uint8_t tile_brick_r_p1[8] = {
  *  idx = (plano1<<1)|plano0). --- */
 #define PADDLE_PAT_L 0
 /* El trozo derecho NO tiene patron propio: es el IZQUIERDO espejado con
- * VC_SPR_FLIP_X (verificado: los planos son exactamente el espejo). Asi el
- * sprite de la derecha solo cuesta 1 byte de FLAGS en vez de 16 de RODATA. */
-static const uint8_t spr_paddle_l_p0[8] = { 0x7F, 0xFF, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0 };
-static const uint8_t spr_paddle_l_p1[8] = { 0x7F, 0xFF, 0xFF, 0x3F, 0xFF, 0xFF, 0x3F, 0xFF };
+ * VC_SPR_FLIP_X. Este patron IS es la punta IZQUIERDA. */
+static const uint8_t spr_paddle_l_p0[8] = { 0x03, 0x07, 0x3F, 0x87, 0x87, 0x87, 0x07, 0x03 };
+static const uint8_t spr_paddle_l_p1[8] = { 0x30, 0x78, 0x7B, 0xF8, 0xF8, 0xF8, 0x78, 0x30 };
 
-/* PALA MEDIA (trozo central para la pala expandida): solo relleno. */
+/* PALA MEDIA (trozo central para la pala expandida): gris con una franja de azul
+ * claro en la fila 2 (cruza la pala). */
 #define PADDLE_PAT_MID 3
-static const uint8_t spr_paddle_mid_p0[8] = { 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-static const uint8_t spr_paddle_mid_p1[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+static const uint8_t spr_paddle_mid_p0[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+static const uint8_t spr_paddle_mid_p1[8] = { 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
 /* PALA LASER (16x8): cuerpo normal + canon de 2x3 en cada punta.
  * Igual que la pala normal, la punta derecha es la izquierda con FLIP_X. */
@@ -197,22 +197,22 @@ static const uint8_t spr_ball_p1[8] = { 0x00, 0x3C, 0x7C, 0x78, 0x70, 0x60, 0x00
 #define CAPS_PAT_B  11   /* break                */
 #define CAPS_PAT_P  12   /* vida extra           */
 
-static const uint8_t caps_E_p0[8] = { 0x00, 0x7E, 0x91, 0x99, 0x91, 0x9D, 0x7E, 0x00 };
-static const uint8_t caps_E_p1[8] = { 0x00, 0x7E, 0xFF, 0xFF, 0xFF, 0xFF, 0x7E, 0x00 };
-static const uint8_t caps_N_p0[8] = { 0x00, 0x7E, 0x9D, 0x9D, 0x95, 0x95, 0x7E, 0x00 };
-static const uint8_t caps_N_p1[8] = { 0x00, 0x7E, 0xFF, 0xFF, 0xFF, 0xFF, 0x7E, 0x00 };
-static const uint8_t caps_C_p0[8] = { 0x00, 0x7E, 0x91, 0x91, 0x91, 0x8D, 0x7E, 0x00 };
-static const uint8_t caps_C_p1[8] = { 0x00, 0x7E, 0xFF, 0xFF, 0xFF, 0xFF, 0x7E, 0x00 };
-static const uint8_t caps_L_p0[8] = { 0x00, 0x7E, 0x91, 0x91, 0x91, 0x9D, 0x7E, 0x00 };
-static const uint8_t caps_L_p1[8] = { 0x00, 0x7E, 0xFF, 0xFF, 0xFF, 0xFF, 0x7E, 0x00 };
-static const uint8_t caps_D_p0[8] = { 0x00, 0x7E, 0x95, 0x95, 0x95, 0x99, 0x7E, 0x00 };
-static const uint8_t caps_D_p1[8] = { 0x00, 0x7E, 0xFF, 0xFF, 0xFF, 0xFF, 0x7E, 0x00 };
-static const uint8_t caps_S_p0[8] = { 0x00, 0x7E, 0x91, 0x89, 0x85, 0x99, 0x7E, 0x00 };
-static const uint8_t caps_S_p1[8] = { 0x00, 0x7E, 0xFF, 0xFF, 0xFF, 0xFF, 0x7E, 0x00 };
-static const uint8_t caps_B_p0[8] = { 0x00, 0x7E, 0x95, 0x99, 0x95, 0x99, 0x7E, 0x00 };
-static const uint8_t caps_B_p1[8] = { 0x00, 0x7E, 0xFF, 0xFF, 0xFF, 0xFF, 0x7E, 0x00 };
-static const uint8_t caps_P_p0[8] = { 0x00, 0x7E, 0x95, 0x99, 0x91, 0x91, 0x7E, 0x00 };
-static const uint8_t caps_P_p1[8] = { 0x00, 0x7E, 0xFF, 0xFF, 0xFF, 0xFF, 0x7E, 0x00 };
+static const uint8_t caps_E_p0[8] = { 0x00, 0x00, 0x3B, 0x27, 0x3F, 0x3F, 0x3F, 0x7E };
+static const uint8_t caps_E_p1[8] = { 0x00, 0x7E, 0xFC, 0xF8, 0xF0, 0xE0, 0xF8, 0x00 };
+static const uint8_t caps_N_p0[8] = { 0x00, 0x00, 0x2B, 0x3F, 0x3F, 0x3F, 0x3F, 0x7E };
+static const uint8_t caps_N_p1[8] = { 0x00, 0x7E, 0xFC, 0xF8, 0xF8, 0xE8, 0xE8, 0x00 };
+static const uint8_t caps_C_p0[8] = { 0x00, 0x00, 0x1B, 0x27, 0x2F, 0x3F, 0x3F, 0x7E };
+static const uint8_t caps_C_p1[8] = { 0x00, 0x7E, 0xFC, 0xF8, 0xF0, 0xE0, 0xD8, 0x00 };
+static const uint8_t caps_L_p0[8] = { 0x00, 0x00, 0x23, 0x27, 0x2F, 0x3F, 0x3F, 0x7E };
+static const uint8_t caps_L_p1[8] = { 0x00, 0x7E, 0xFC, 0xF8, 0xF0, 0xE0, 0xF8, 0x00 };
+static const uint8_t caps_D_p0[8] = { 0x00, 0x00, 0x33, 0x2F, 0x2F, 0x3F, 0x3F, 0x7E };
+static const uint8_t caps_D_p1[8] = { 0x00, 0x7E, 0xFC, 0xF8, 0xF8, 0xE8, 0xF0, 0x00 };
+static const uint8_t caps_S_p0[8] = { 0x00, 0x00, 0x1B, 0x27, 0x1F, 0x1F, 0x3F, 0x7E };
+static const uint8_t caps_S_p1[8] = { 0x00, 0x7E, 0xFC, 0xF8, 0xF0, 0xE8, 0xF0, 0x00 };
+static const uint8_t caps_B_p0[8] = { 0x00, 0x00, 0x33, 0x2F, 0x3F, 0x3F, 0x3F, 0x7E };
+static const uint8_t caps_B_p1[8] = { 0x00, 0x7E, 0xFC, 0xF8, 0xF0, 0xE8, 0xF0, 0x00 };
+static const uint8_t caps_P_p0[8] = { 0x00, 0x00, 0x33, 0x2F, 0x3F, 0x3F, 0x3F, 0x7E };
+static const uint8_t caps_P_p1[8] = { 0x00, 0x7E, 0xFC, 0xF8, 0xF0, 0xE0, 0xE0, 0x00 };
 
 /* ===========================================================================
  * SLOTS DE OAM Y PALETAS
@@ -235,20 +235,29 @@ static const uint8_t caps_P_p1[8] = { 0x00, 0x7E, 0xFF, 0xFF, 0xFF, 0xFF, 0x7E, 
  * pantallas ocupa RODATA una sola vez. Estos defines evitan repetir el literal
  * (y ademas garantizan que las copias sean byte a byte iguales, que es lo que
  * permite al compilador reutilizarlas).                                       */
-#define TXT_FIRE      "ESPACIO = LANZAR"   /* titulo y game over */
-#define TXT_AGAIN     "PULSA BOTON"        /* titulo y game over */
+#define TXT_AGAIN     "PULSA BOTON"        /* titulo (TIT_LEN debe coincidir) */
+/* Posicion del cartel parpadeante del titulo. Se quedo el banner SIMPLE del
+ * commit: los ladrillos decorativos y las posiciones nuevas se retiraron porque
+ * se sospecha que provocaban el bug del NIVEL SUPERADO inmediato (escritura en
+ * VRAM fuera de sitio). TIT_LEN DEBE coincidir con la longitud de TXT_AGAIN. */
+#define TIT_COL       15
+#define TIT_ROW       21
+#define TIT_LEN       11
 
 #define PAL_PADDLE_S  VC_SPPAL_0   /* pala: colores exactos del arte          */
 #define PAL_BALL_S    VC_SPPAL_1   /* bola: gris con bisel                    */
 #define PAL_CAPS_GOOD VC_SPPAL_2   /* capsulas buenas (verde/cian)            */
 #define PAL_CAPS_BAD  VC_SPPAL_3   /* capsulas malas  (rojo)                  */
 
-/* Paleta de SPRITE de la pala: AZUL (escala claro/medio/oscuro). Los patrones
- * de la pala usan 3 = claro (bisel), 2 = relleno, 1 = detalle oscuro. */
+/* Paleta de SPRITE de la pala. Indices (los patrones usan):
+ *   1 = gris (sombra / bloque solido)
+ *   2 = rojo (cuerpo)
+ *   3 = rojo claro (highlight/bisel)
+ * El orden del array coincide con el indice del core (pal_paddle[0] -> idx 1). */
 static const uint16_t pal_paddle[3] = {
-    VC_RGB444(0xA, 0xC, 0xF),   /* 1: azul claro  (detalle)   */
-    VC_RGB444(0x4, 0x6, 0xD),   /* 2: azul medio  (relleno)   */
-    VC_RGB444(0x0, 0x2, 0x6)    /* 3: azul oscuro (bisel)     */
+    VC_RGB444(0x8, 0x8, 0x8),   /* 1: gris        #8D8D8D */
+    VC_RGB444(0xC, 0x0, 0x0),   /* 2: rojo        #C80000 */
+    VC_RGB444(0xF, 0xE, 0xE)    /* 3: rojo claro  #FFEEEE */
 };
 
 /* Paleta de SPRITE de la BOLA: 3 tonos de GRIS para el bisel tipo esfera
@@ -259,16 +268,19 @@ static const uint16_t pal_ball[3] = {
     VC_RGB444(0xF, 0xF, 0xF)
 };
 
-/* Paletas de SPRITE de las CAPSULAS (1 = detalle, 2 = relleno, 3 = marco/letra). */
+/* Paletas de SPRITE de las CAPSULAS.
+ * Indices del patron: 1 = verde oscuro (sombra), 2 = verde medio (marco/claro),
+ * 3 = blanco (letra). La letra usa SOLO el indice 3; el resto de la capsula usa
+ * 1 y 2 con una separacion diagonal que simula sombra. */
 static const uint16_t pal_caps_good[3] = {
-    VC_RGB444(0x0, 0x4, 0x0),
-    VC_RGB444(0x2, 0xE, 0x2),
-    VC_RGB444(0xF, 0xF, 0xF)
+    VC_RGB444(0x0, 0xA, 0x1),   /* 1: verde oscuro #00A90C */
+    VC_RGB444(0x5, 0xC, 0x5),   /* 2: verde medio  #53D35C */
+    VC_RGB444(0xF, 0xF, 0xF)    /* 3: blanco       #FFFFFF */
 };
 static const uint16_t pal_caps_bad[3] = {
-    VC_RGB444(0x4, 0x0, 0x0),
-    VC_RGB444(0xE, 0x2, 0x2),
-    VC_RGB444(0xF, 0xF, 0xF)
+    VC_RGB444(0xA, 0x1, 0x0),   /* 1: rojo oscuro  #A90C00 */
+    VC_RGB444(0xC, 0x5, 0x5),   /* 2: rojo medio   #D35C53 */
+    VC_RGB444(0xF, 0xF, 0xF)    /* 3: blanco       #FFFFFF */
 };
 
 /* Recarga las 4 paletas de sprite programables de una vez (bucle compacto).
@@ -298,7 +310,14 @@ static void spr_palettes_set(void) {
  * misma altura (el core solo dibuja 8 sprites por linea horizontal). Como todas
  * caen a la misma velocidad, con 16 px (2 celdas) la separacion se mantiene. */
 #define CAPS_MIN_GAP 16
-#define CAPS_CHANCE   3     /* 1 de cada N bloques roto suelta capsula        */
+/* Frecuencia de capsulas. OJO: el nombre engana. NO es "1 de cada N": el divisor
+ * real es BRICK_COUNT / CAPS_CHANCE (ver brick_break), asi que SUBIR este valor
+ * hace que salgan MAS capsulas. Con 65 ladrillos:
+ *   CAPS_CHANCE = 3  -> 1 de cada 21 (4.8%)  <- valor original
+ *   CAPS_CHANCE = 12 -> 1 de cada  5 (20%)   <- valor de PRUEBA
+ * Hay ademas dos filtros en caps_spawn (maximo 2 a la vez y CAPS_MIN_GAP), que
+ * descartan parte de las que tocan. */
+#define CAPS_CHANCE  12     /* divisor = 65/12 = 5 -> 1 de cada 5 bloques      */
 #define CAPS_SLOT0    3     /* primer slot de OAM para las capsulas           */
 
 /* Tipos de capsula (efecto). */
@@ -866,14 +885,13 @@ static uint8_t caps_step(void) {
 /* ===========================================================================
  * RAYOS LASER (proyectiles de la pala cuando el efecto LASER esta activo)
  * ===========================================================================
- * Se disparan DOS rayos a la vez, uno desde cada punta de la pala.
- *
- * LIMITE DE SPRITES: el core solo dibuja 8 por linea horizontal, y en la linea
- * de la pala pueden coincidir la pala + las 3 bolas del multi-bola + los rayos:
- *     pala normal (3)    + 3 bolas + 2 rayos = 8  -> justo en el limite, OK
- *     pala EXPANDIDA (4) + 3 bolas + 2 rayos = 9  -> OVERFLOW
- * Por eso, con la pala expandida, el rayo DERECHO se omite y solo sale el
- * izquierdo. Es preferible perder un rayo que perder el dibujado de una bola. */
+ * Se disparan DOS rayos a la vez, uno desde cada punta de la pala, con cualquier
+ * ancho de pala. El rayo nace 8 px por encima (PADDLE_Y - 8) y SUBE, asi que en
+ * la practica no comparte fila con la pala ni con las bolas, y el limite de 8
+ * sprites por linea no suele alcanzarse. Solo en el frame exacto del disparo y
+ * con las 3 bolas del multi-bola en la fila de la pala a la vez podria rozarse.
+ * Si en hardware se viera un sprite desaparecer (una bola que se esfuma), habria
+ * que volver a omitir el rayo derecho con la pala expandida. */
 
 /* Dispara los rayos desde las puntas de la pala. Cada punta tiene su propio
  * rayo, asi que basta con lanzar los que NO esten ya en vuelo. */
@@ -884,9 +902,13 @@ static void laser_fire(void) {
         laser_y  = (uint8_t)(PADDLE_Y - 8);
         laser_active = 1;
     }
-    /* Rayo DERECHO (punta derecha): se omite con la pala expandida (limite de
-     * sprites por linea) y si ya esta en vuelo. */
-    if (!laser_active2 && fx.paddle_w <= PADDLE_W_NORMAL) {
+    /* Rayo DERECHO (punta derecha). Tambien con la pala expandida: el rayo nace
+     * 8 px por encima de la pala (PADDLE_Y - 8) y SUBE, asi que practicamente
+     * nunca comparte fila con la pala ni con las bolas. La justificacion antigua
+     * de omitirlo (4 pala + 3 bolas + 2 rayos = 9) asumia que todo coincide en la
+     * misma linea, cosa que solo pasaria en el frame exacto del disparo y con las 3
+     * bolas en la fila de la pala a la vez. Se permite y se observa en hardware. */
+    if (!laser_active2) {
         laser_x2 = (uint8_t)(paddle_x + fx.paddle_w - 2);
         laser_y2 = (uint8_t)(PADDLE_Y - 8);
         laser_active2 = 1;
@@ -946,7 +968,14 @@ static void paddle_reset(void) {
     paddle_vx = 0;
     ball_set_speed();   /* velocidad del nivel (y efecto SLOW) ANTES de colocar la bola */
 
-    for (i = 0; i < MAX_BALLS; i++) balls[i].active = 0;
+    /* Se limpia TODO el estado de las 3 bolas, 'stuck' incluido: ball_any_stuck()
+     * no comprueba 'active' (se quito para ahorrar codigo), asi que una bola
+     * desactivada con stuck = 1 dejaria el boton bloqueado en "lanzar" y el laser
+     * no dispararia nunca. */
+    for (i = 0; i < MAX_BALLS; i++) {
+        balls[i].active = 0;
+        balls[i].stuck  = 0;
+    }
     balls[0].active = 1;
     balls[0].x      = (uint16_t)(((uint16_t)paddle_x + (fx.paddle_w / 2) - (BALL_SIZE / 2)) << 8);
     balls[0].y      = (uint16_t)((uint16_t)(PADDLE_Y - BALL_SIZE) << 8);
@@ -958,19 +987,26 @@ static void paddle_reset(void) {
     balls_live      = 1;
 }
 
-/* Devuelve 1 si alguna bola esta pegada a la pala (stuck). */
+/* Devuelve 1 si alguna bola esta pegada a la pala (stuck).
+ * No hace falta comprobar 'active': al perder una bola se limpia su 'stuck',
+ * asi que stuck = 1 solo puede pasar en una bola en juego. */
 static uint8_t ball_any_stuck(void) {
     uint8_t i;
-    for (i = 0; i < MAX_BALLS; i++) if (balls[i].active && balls[i].stuck) return 1;
+    for (i = 0; i < MAX_BALLS; i++) if (balls[i].stuck) return 1;
     return 0;
 }
 
-/* Suelta todas las bolas pegadas (al pulsar el boton de lanzar). */
+/* Suelta todas las bolas pegadas (al pulsar el boton de lanzar).
+ *
+ * Basta con soltar el flag: mientras 'stuck' sea 1 la bola no se mueve (ball_step
+ * ni se ejecuta, play_level la recoloca sobre la pala), y el vy que lleva ya es el
+ * correcto hacia arriba, puesto al capturarla con CATCH. */
 static void ball_launch(void) {
     uint8_t i;
-    for (i = 0; i < MAX_BALLS; i++) {
-        if (balls[i].active) balls[i].stuck = 0;
-    }
+    /* Se limpia 'stuck' en TODAS las bolas, no solo en las activas: ball_any_stuck()
+     * no mira 'active', asi que una bola inactiva con stuck = 1 dejaria el boton
+     * bloqueado para siempre (no lanzaba y no disparaba -> se perdia la bola). */
+    for (i = 0; i < MAX_BALLS; i++) balls[i].stuck = 0;
 }
 
 /* DISRUPTION: triplica la bola. Toma la primera bola en juego y crea copias con
@@ -983,12 +1019,14 @@ static void ball_split(void) {
     /* Activa hasta 3 bolas. El barrido de arriba abajo deja a balls[0] de base
      * (siempre activa) y rellena los huecos de abajo: no hace falta buscar cual
      * es la bola "principal". */
-    for (i = 0; i < MAX_BALLS; i++) {
+    for (i = 0; i < MAX_BALLS && n < 2; i++) {
         if (balls[i].active) continue;
-        if (n >= 2) break;
         balls[i]           = balls[0];      /* copia posicion y fracciones */
         balls[i].active    = 1;
         balls[i].stuck     = 0;             /* las copias salen volando  */
+        balls[i].frac_x    = 0;             /* PRUEBA: fracciones a cero para no
+                                             * heredar el acumulador de balls[0] */
+        balls[i].frac_y    = 0;
         /* Angulos: una a la izquierda y otra a la derecha, con el MISMO angulo
          * de 45 grados (|vx| = |vy| = ball_vy la primera vez que se recoge). */
         balls[i].vx        = (int16_t)(n == 0 ? -ball_vy : ball_vy);
@@ -1044,6 +1082,7 @@ static uint8_t solid_kind(uint16_t px, uint16_t py) {
 }
 
 /* Rompe el ladrillo de la celda (en pixeles). */
+/* Rompe el ladrillo de la celda (en pixeles). */
 static void break_px(uint16_t px, uint16_t py) {
     uint8_t r = brick_break((uint8_t)(px >> 3), (uint8_t)(py >> 3));
     if (r) {
@@ -1073,10 +1112,10 @@ static void break_px(uint16_t px, uint16_t py) {
  * --------------------------------------------------------------------------- */
 #define PADDLE_ZONES 4
 static const int16_t paddle_zone_vx[PADDLE_ZONES] = {
-    -0x180,   /* zona 0: punta IZQUIERDA -> 45 grados a la izquierda */
-    -0x0B0,   /* zona 1: izquierda       -> 25 grados a la izquierda */
-     0x0B0,   /* zona 2: derecha         -> 25 grados a la derecha   */
-     0x180    /* zona 3: punta DERECHA   -> 45 grados a la derecha   */
+    -0x180,   /* zona 0: punta IZQUIERDA -> 45.0 grados a la izquierda */
+    -0x0E0,   /* zona 1: izquierda       -> 30.3 grados a la izquierda */
+     0x0E0,   /* zona 2: derecha         -> 30.3 grados a la derecha   */
+     0x180    /* zona 3: punta DERECHA   -> 45.0 grados a la derecha   */
 };
 
 /* NOTA: en el centro (zonas 1 y 2) la bola sale mas recta (25 grados) que en las
@@ -1087,14 +1126,20 @@ static const int16_t paddle_zone_vx[PADDLE_ZONES] = {
  * Se queda tal cual: las 4 zonas funcionan y el angulo de cada una es correcto. */
 
 /* Zona de golpe (0..3) para una distancia 'rel' desde la punta izquierda.
- * En vez de dividir por el ancho (el '/' arrastraria las rutinas udiv/umod),
- * se busca el tramo con una tabla: los valores de corte son (ancho/4)*1,2,3.
- * ASCII ordenado, con los 2 anchos posibles (corta y normal dan lo mismo). */
-static const uint8_t zone_cut[PADDLE_ZONES - 1] = { 6, 12, 18 };
-static uint8_t paddle_zone(uint8_t rel) {
-    uint8_t z = 0;
-    while (z < PADDLE_ZONES - 1 && rel >= zone_cut[z]) z++;
-    return z;
+ *
+ * Las 4 zonas se reparten el ANCHO de la pala a partes iguales, asi la punta de
+ * cualquier pala da 45 grados y el centro algo menos. Con cortes FIJOS (6,12,18)
+ * la pala corta (16 px) nunca alcanzaba la zona 3, y al cambiar de ancho el mismo
+ * golpe cambiaba de zona y la bola salia a otra velocidad (se notaba como un
+ * frenazo justo al pasar de encogida a normal).
+ *
+ * Los cortes son ancho/4, ancho/2 y 3*ancho/4, que salen con desplazamientos
+ * (sin tabla ni multiplicacion, que es lo que no cabia en RAM). */
+static uint8_t paddle_zone(uint8_t rel, uint8_t w) {
+    if (rel >= (uint8_t)(w - (w >> 2))) return 3;
+    if (rel >= (uint8_t)(w >> 1))      return 2;
+    if (rel >= (uint8_t)(w >> 2))      return 1;
+    return 0;
 }
 
 /* Avanza la bola 'b' un frame completo (pasos de 1 pixel). Devuelve 1 si la bola ha
@@ -1221,9 +1266,12 @@ static uint8_t ball_step(uint8_t b) {
                     (uint16_t)lx < (uint16_t)(paddle_x + fx.paddle_w)) {
                     if (fx.catch) {
                         /* CATCH: la pala atrapa la bola (se queda pegada hasta
-                         * volver a lanzarla). */
+                         * volver a lanzarla). El vy se pone HACIA ARRIBA aqui, no
+                         * a 0: asi al lanzarla sale con su angulo y sube, en vez de
+                         * salir horizontal (que era el bug). Mientras 'stuck' sea 1
+                         * la bola no se mueve, aunque el vy este puesto. */
                         p->stuck = 1;
-                        p->vy = 0;               /* al lanzar, saldra hacia arriba */
+                        p->vy = (int16_t)(-ball_vy);
                         p->y = (uint16_t)((uint16_t)(PADDLE_Y - BALL_SIZE) << 8);
                         snd_wall();
                         return 0;
@@ -1234,7 +1282,7 @@ static uint8_t ball_step(uint8_t b) {
                         int16_t rel = (int16_t)((lx + BALL_SIZE / 2) - (int16_t)paddle_x);
                         uint8_t zone;
                         if (rel < 0) rel = 0;
-                        zone = paddle_zone((uint8_t)rel);
+                        zone = paddle_zone((uint8_t)rel, fx.paddle_w);
                         /* Velocidad por eje segun la zona (el signo de vx sale
                          * de la tabla: izquierda negativa, derecha positiva).
                          * En el CENTRO (zonas 1 y 2) el eje Y tambien sube, para
@@ -1540,8 +1588,11 @@ static uint8_t play_level(void) {
                 balls[i].x = (uint16_t)(((uint16_t)paddle_x + (fx.paddle_w / 2) - (BALL_SIZE / 2)) << 8);
                 balls[i].y = (uint16_t)((uint16_t)(PADDLE_Y - BALL_SIZE) << 8);
             } else if (ball_step(i)) {
-                /* Esta bola cayo: se desactiva. */
+                /* Esta bola cayo: se desactiva. Se limpia tambien 'stuck' para que
+                 * una bola fuera de juego no quede marcada como pegada (de ahi
+                 * depende ball_any_stuck, que decide si el boton lanza o dispara). */
                 balls[i].active = 0;
+                balls[i].stuck  = 0;
                 if (balls_live) balls_live--;
                 lost = 1;
             }
@@ -1613,11 +1664,6 @@ static uint8_t title_screen(void) {
 
     put_str_pal(14, 6, "A R K A N O I D", PAL_TITLE);
 
-    /* Ayuda: se reutilizan las MISMAS cadenas en todas las pantallas (cc65
-     * deduplica literales identicos, asi que cada texto distinto ocupa una vez). */
-    put_str_pal(10, 16, "A/D = MOVER", PAL_TEXT);
-    put_str_pal(10, 18, TXT_FIRE, PAL_TEXT);
-
     /* Pala de adorno (sprites). La bola NO se dibuja en el titulo: en una
      * pantalla sin juego se veia raro y solo gastaba codigo. */
     fx_reset();
@@ -1627,17 +1673,19 @@ static uint8_t title_screen(void) {
     vc_wait_vblank_end();
 
     {
-        uint8_t  shown = 0xFF;
         uint16_t hold  = 0;
+        uint8_t  shown = 0xFF;
 
         for (;;) {
             uint8_t r;
+            /* Titileo lento: cambia cada 40 frames (~0.67 s). Alternando cada
+             * frame parpadea a 30 Hz, que se ve como un temblor, no como titileo. */
             uint8_t on = (uint8_t)((hold / 40) & 1);
 
             vc_wait_vblank();
             if (on != shown) {
-                if (on) clear_str_at(15, 21, 9);
-                else    put_str_pal(15, 21, TXT_AGAIN, PAL_TITLE);
+                if (on) clear_str_at(TIT_COL, TIT_ROW, TIT_LEN);
+                else    put_str_pal(TIT_COL, TIT_ROW, TXT_AGAIN, PAL_TITLE);
                 shown = on;
             }
             /* Recoloca la pala de adorno cada frame. */
@@ -1749,9 +1797,6 @@ int main(void) {
             put_str_pal(15, 8, "GAME OVER", PAL_TITLE);
             put_str_at(14, 11, "PUNTOS:");
             put_u16_at(21, 11, score, 5);
-            /* Ayuda: se reutilizan las MISMAS cadenas del titulo (ahorra RODATA). */
-            put_str_at(10, 16, TXT_AGAIN);
-            put_str_at(10, 18, TXT_FIRE);
             vc_wait_vblank_end();
             rom_uart_puts("\r\nGAME OVER - BOTON/R = jugar de nuevo, Q = salir\r\n");
 
