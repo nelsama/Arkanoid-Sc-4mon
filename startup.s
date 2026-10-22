@@ -42,12 +42,16 @@ _init:
     ; Llamar a main
     jsr _main
 
-    ; Si main retorna, saltar al monitor en ROM.
-    ; NOTA: se usa jmp (reset del monitor) y NO un RTS, porque el monitor no
-    ; preserva su estado (ZP y RAM) antes de ejecutar el programa: al volver
-    ; con RTS reanudaria con su estado corrupto. jmp $8000 es el mecanismo
-    ; previsto por el monitor (igual que en sus ejemplos oficiales).
-    jmp $8000
+    ; Si main retorna, volver al monitor.
+    ; Se activa el AUTOBOOT escribiendo 0 en $C004 bit 0 (registro de hardware
+    ; que persiste al reset) y se reentra por el VECTOR RESET con jmp ($FFFC).
+    ; Asi el monitor relee BOOT.INI y ejecuta el launcher, en vez de quedar en
+    ; el prompt. (jmp $8000 reentra igual, pero NO pasa por RESET ni procesa
+    ; el flag de autoboot.)
+    sei
+    lda #$00
+    sta $C004       ; $C004 bit0 = 0 -> permitir autoboot (leer BOOT.INI)
+    jmp ($FFFC)     ; reset -> monitor + BOOT.INI
 
 ; ============================================
 ; zerobss - Inicializa BSS a ceros
