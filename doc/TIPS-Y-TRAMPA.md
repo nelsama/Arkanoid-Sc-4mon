@@ -187,6 +187,33 @@ hardware ignoraba el tile). Se corrigió en la librería.
 > tu código/librería escribe X bien. Un byte mal pasado puede parecer un bug de HW.
 > Mantén la librería actualizada y prueba casos simples de forma aislada.
 
+### 3.6 Al cambiar de pantalla: apaga sprites Y limpia el estado asociado
+El game over / título / despedida deben **apagar los sprites** (`vc_sprite_disable`
+por cada slot, o tu helper `sprites_hide()`), pero no basta con eso: **limpia también
+las variables de estado ligadas a ellos**.
+
+**Trampa real (Arkanoid):** al perder una vida se ponía `balls[i].active = 0` pero
+se olvidaba `balls[i].stuck = 0`. Como `ball_any_stuck()` no comprueba `active`,
+aquella bola "fantasma" seguía marcada como pegada → el botón quedaba bloqueado en
+modo "lanzar" y **el láser nunca disparaba**, o la bola no salía. Un sprite que ya
+no se ve no significa que su *estado* esté limpio.
+
+> **Regla:** al desactivar/ocultar un objeto, limpia **todos** sus flags, no solo el
+> que lo dibuja. Y si una función de consulta (`ball_any_stuck`) deja de comprobar
+> `active` por ahorrar código, **todos** los sitios que escriben ese flag deben
+> mantener el invariante (limpiar también `stuck` al desactivar).
+
+### 3.7 Split/multi-objeto: ojo con el estado compartido entre copias
+Al duplicar un objeto (multi-bola, disparos) es fácil dejar **variables de
+lectura** compartidas que cada copia pise. Síntoma típico: "anomalías solo cuando
+hay varios" (una bola se frena, un rebote afecta a otra, un bloque desaparece sin
+impacto), que no se reproducen con uno solo.
+
+> **Regla:** cada copia debe llevar **su propio** `x/y/vx/vy/frac`, y las
+> funciones que las comparten (rebote, colisión) no deben escribir globales de
+> estado. Si aparece un fallo "solo con varios", busca qué variable global
+> comparten las copias (velocidad de referencia, temporizador, flag de efecto).
+
 ---
 
 ## 4. Entrada y HUD / texto
