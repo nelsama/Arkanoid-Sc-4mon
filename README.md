@@ -39,6 +39,8 @@ Si no la lanzas, sale sola pasados unos segundos.
 divide en **4 zonas**: las dos puntas lanzan a 45° hacia su lado y las dos zonas
   centrales a 25°. Así la bola se puede **dirigir**, como en el Arkanoid arcade.
 
+![Gameplay de Arkanoid](doc/img/gameplay.png)
+
 ---
 
 ## Diseño del juego (decisiones fijadas)
