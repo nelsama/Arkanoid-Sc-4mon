@@ -1647,6 +1647,11 @@ static uint8_t title_screen(void) {
 
     vc_wait_vblank_end();
 
+    /* Anti-rebote de entrada: si se llega con FUEGO pulsado (p. ej. desde el
+     * game over), esperar a que se suelte para que ese pulso NO confirme la
+     * opcion por defecto. */
+    while (joy_read() & JOY_A_FIRE) { vc_wait_vblank(); vc_wait_vblank_end(); }
+
     for (;;) {
         uint8_t j;
 
@@ -1773,6 +1778,8 @@ int main(void) {
             vc_wait_vblank(); vc_wait_vblank_end();
             if (joy_read() & JOY_A_FIRE) break;
         }
+        /* Deja de pulsarse antes de volver al menu, para no confirmar JUGAR. */
+        while (joy_read() & JOY_A_FIRE) { vc_wait_vblank(); vc_wait_vblank_end(); }
     }
 
     bye_screen();
