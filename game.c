@@ -235,14 +235,6 @@ static const uint8_t caps_P_p1[8] = { 0x00, 0x7E, 0xFC, 0xF8, 0xF0, 0xE0, 0xE0, 
  * pantallas ocupa RODATA una sola vez. Estos defines evitan repetir el literal
  * (y ademas garantizan que las copias sean byte a byte iguales, que es lo que
  * permite al compilador reutilizarlas).                                       */
-#define TXT_AGAIN     "PULSA BOTON"        /* titulo (TIT_LEN debe coincidir) */
-/* Posicion del cartel parpadeante del titulo. Se quedo el banner SIMPLE del
- * commit: los ladrillos decorativos y las posiciones nuevas se retiraron porque
- * se sospecha que provocaban el bug del NIVEL SUPERADO inmediato (escritura en
- * VRAM fuera de sitio). TIT_LEN DEBE coincidir con la longitud de TXT_AGAIN. */
-#define TIT_COL       15
-#define TIT_ROW       21
-#define TIT_LEN       11
 
 #define PAL_PADDLE_S  VC_SPPAL_0   /* pala: colores exactos del arte          */
 #define PAL_BALL_S    VC_SPPAL_1   /* bola: gris con bisel                    */
@@ -371,14 +363,6 @@ static void spr_palettes_set(void) {
 #define BALL_SPEED_MAX 0x0380  /* 3.50 px/frame (se alcanza en el nivel 5)    */
 
 #define START_LIVES   3
-
-/* Teclas UART (incluye los codigos que algunos terminales envian para flechas). */
-#define KEY_LEFT      'a'
-#define KEY_LEFT2     '4'
-#define KEY_RIGHT     'd'
-#define KEY_RIGHT2    '6'
-#define KEY_LAUNCH    ' '
-#define KEY_QUIT      'q'
 
 /* ===========================================================================
  * ESTADO
@@ -1521,23 +1505,12 @@ static void setup_video(void) {
 static void read_input(void) {
     uint8_t j = joy_read();
     uint8_t fire_pressed = 0;
-    char c;
 
     paddle_vx = 0;
     if (j & JOY_A_LEFT)  paddle_vx = -1;
     if (j & JOY_A_RIGHT) paddle_vx = +1;
 
-    while (rom_uart_rx_ready()) {
-        c = rom_uart_getc();
-        if (c == KEY_LEFT || c == KEY_LEFT2)  paddle_vx = -1;
-        else if (c == KEY_RIGHT || c == KEY_RIGHT2) paddle_vx = +1;
-        else if (c == KEY_LAUNCH || c == '\r' || c == '\n') {
-            fire_pressed = 1;
-        }
-        else if (c == KEY_QUIT || c == 'Q') quit_flag = 1;
-    }
-
-    /* El boton de fuego tambien dispara. */
+    /* Solo joystick: se elimino el input por UART (teclado). */
     if (j & JOY_A_FIRE) fire_pressed = 1;
 
     /* Si hay bolas pegadas, el boton las lanza; si no y hay laser (y el rayo
@@ -1643,59 +1616,71 @@ static uint8_t play_level(void) {
 }
 
 /* ===========================================================================
- * PANTALLA DE BIENVENIDA
- * =========================================================================== */
-/* 1 = empezar, 0 = salir */
-static uint8_t start_pressed(void) {
-    char c;
-    if (joy_read() & JOY_A_FIRE) return 1;
-    while (rom_uart_rx_ready()) {
-        c = rom_uart_getc();
-        if (c == ' ' || c == '\r' || c == '\n' || c == 'e' || c == 'E') return 1;
-        if (c == 'q' || c == 'Q') return 2;
-    }
-    return 0;
-}
+ * PANTALLA DE BIENVENIDA (menu JUGAR / SALIR por joystick)
+ * ===========================================================================
+ * Dos opciones: JUGAR y SALIR. Arriba/abajo cambia la seleccion, FUEGO confirma.
+ * Devuelve 1 = jugar, 0 = salir (salir activa el autoboot del monitor). */
+#define MENU_JUGAR    0
+#define MENU_SALIR    1
+#define MENU_OPCIONES 2
+#define MENU_COL      18   /* texto; la flecha va en MENU_COL-2 (col 16) */
+#define MENU_ROW      12
 
 static uint8_t title_screen(void) {
+    uint8_t sel = MENU_JUGAR;
+    uint8_t shown = 0xFF;
+
     vc_wait_vblank();
-    sprites_hide();          /* por si acaso: arranca sin sprites visibles */
+    sprites_hide();
     screen_clear();
 
     put_str_pal(14, 6, "A R K A N O I D", PAL_TITLE);
 
-    /* Pala de adorno (sprites). La bola NO se dibuja en el titulo: en una
-     * pantalla sin juego se veia raro y solo gastaba codigo. */
+    /* Pala de adorno (sprites). */
     fx_reset();
     paddle_x = (int16_t)((VC_SCREEN_W / 2) - (fx.paddle_w / 2));
     paddle_draw();
 
+    /* Opciones del menu. */
+    put_str_pal(MENU_COL, MENU_ROW,     "JUGAR", PAL_TEXT);
+    put_str_pal(MENU_COL, MENU_ROW + 2, "SALIR", PAL_TEXT);
+
     vc_wait_vblank_end();
 
-    {
-        uint16_t hold  = 0;
-        uint8_t  shown = 0xFF;
+    for (;;) {
+        uint8_t j;
 
-        for (;;) {
-            uint8_t r;
-            /* Titileo lento: cambia cada 40 frames (~0.67 s). Alternando cada
-             * frame parpadea a 30 Hz, que se ve como un temblor, no como titileo. */
-            uint8_t on = (uint8_t)((hold / 40) & 1);
+        vc_wait_vblank();
+        paddle_draw();
+        vc_wait_vblank_end();
 
-            vc_wait_vblank();
-            if (on != shown) {
-                if (on) clear_str_at(TIT_COL, TIT_ROW, TIT_LEN);
-                else    put_str_pal(TIT_COL, TIT_ROW, TXT_AGAIN, PAL_TITLE);
-                shown = on;
-            }
-            /* Recoloca la pala de adorno cada frame. */
-            paddle_draw();
-            hold++;
-            vc_wait_vblank_end();
+        j = joy_read();
 
-            r = start_pressed();
-            if (r == 1) { sprites_hide(); return 1; }
-            if (r == 2) { sprites_hide(); return 0; }
+        /* Arriba/abajo cambian la seleccion. Hay anti-rebote: solo cambia una
+         * vez por pulso. */
+        if ((j & JOY_A_UP) && sel == MENU_SALIR) {
+            sel = MENU_JUGAR;
+            shown = 0xFF;   /* forzar redibujo de la marcas de seleccion */
+        } else if ((j & JOY_A_DOWN) && sel == MENU_JUGAR) {
+            sel = MENU_SALIR;
+            shown = 0xFF;
+        }
+
+        /* Dibuja el indicador de seleccion (una flecha). Se limpia SOLO una
+         * celda (la de la flecha) para no pisar la primera letra del texto. */
+        if (sel != shown) {
+            /* limpia el indicador anterior (1 celda) */
+            put_str_pal(MENU_COL - 2, MENU_ROW,     " ", PAL_TEXT);
+            put_str_pal(MENU_COL - 2, MENU_ROW + 2, " ", PAL_TEXT);
+            /* dibuja el indicador nuevo */
+            put_str_pal(MENU_COL - 2, (sel == MENU_JUGAR) ? MENU_ROW : MENU_ROW + 2, ">", PAL_TITLE);
+            shown = sel;
+        }
+
+        /* FUEGO confirma la opcion seleccionada. */
+        if (j & JOY_A_FIRE) {
+            sprites_hide();
+            return (sel == MENU_JUGAR) ? 1 : 0;
         }
     }
 }
@@ -1724,31 +1709,17 @@ static void bye_screen(void) {
  * MAIN
  * =========================================================================== */
 int main(void) {
-    uint8_t again;
-
-    rom_uart_puts("\r\nARKANOID - Core de Video\r\n");
-    rom_uart_puts("A/D o joystick = mover, ESPACIO = lanzar, q = salir.\r\n");
-
     setup_video();
     snd_init();
     joy_init();
     fx_reset();          /* estado inicial de los efectos (ancho de pala, etc.) */
 
-    if (!title_screen()) {
-        bye_screen();
-        snd_silence();
-        vc_wait_vblank();
-        vc_clear_oam();
-        vc_set_scroll_x(0);
-        vc_set_scroll_y(0);
-        rom_uart_puts("\r\nSaliendo al monitor...\r\n");
-        return 0;
-    }
+    /* Bucle principal: menu -> partida -> (game over) -> menu -> ...
+     * SALIR en el menu rompe el bucle y sale (autoboot, como QB). */
+    for (;;) {
+        if (!title_screen()) break;   /* SALIR */
 
-    do {
-        again = 0;
         rng_seed();
-
         score = 0;
         level = 1;
         lives = START_LIVES;
@@ -1778,43 +1749,31 @@ int main(void) {
                     }
                 }
                 vc_wait_vblank();
-                clear_str_at(13, 15, 14);   /* borra solo "NIVEL SUPERADO" (cols 13..26),
-                                             * sin tocar el muro derecho (col 32) */
+                clear_str_at(13, 15, 14);   /* borra solo "NIVEL SUPERADO" */
                 vc_wait_vblank_end();
             } else {
-                break;   /* game over o salida */
+                break;   /* game over */
             }
         }
 
-        if (quit_flag) {
-            again = 0;
-        } else {
-            /* GAME OVER */
-            snd_silence();
-            vc_wait_vblank();
-            sprites_hide();          /* apaga pala y bola (no deben flotar) */
-            screen_clear();
-            put_str_pal(15, 8, "GAME OVER", PAL_TITLE);
-            put_str_at(14, 11, "PUNTOS:");
-            put_u16_at(21, 11, score, 5);
-            vc_wait_vblank_end();
-            rom_uart_puts("\r\nGAME OVER - BOTON/R = jugar de nuevo, Q = salir\r\n");
+        /* GAME OVER: espera a que se pulse FUEGO para volver al menu. */
+        snd_silence();
+        vc_wait_vblank();
+        sprites_hide();          /* apaga pala y bola (no deben flotar) */
+        screen_clear();
+        put_str_pal(15, 8, "GAME OVER", PAL_TITLE);
+        put_str_at(14, 11, "PUNTOS:");
+        put_u16_at(21, 11, score, 5);
+        put_str_pal(13, 15, "PRESIONA FIRE", PAL_TEXT);
+        vc_wait_vblank_end();
 
-            {
-                uint8_t d;
-                for (d = 0; d < 20; d++) { vc_wait_vblank(); vc_wait_vblank_end(); }
-            }
-            for (;;) {
-                char c;
-                if (joy_read() & JOY_A_FIRE) { again = 1; break; }
-                if (!rom_uart_rx_ready()) { vc_wait_vblank(); vc_wait_vblank_end(); continue; }
-                c = rom_uart_getc();
-                if (c == 'r' || c == 'R') { again = 1; break; }
-                if (c == 'q' || c == 'Q') { again = 0; break; }
-            }
-            if (again) rom_uart_puts("\r\nNueva partida.\r\n");
+        /* Espera un pulso de FUEGO (con anti-rebote: espera a que se suelte). */
+        while (joy_read() & JOY_A_FIRE) { vc_wait_vblank(); vc_wait_vblank_end(); }
+        for (;;) {
+            vc_wait_vblank(); vc_wait_vblank_end();
+            if (joy_read() & JOY_A_FIRE) break;
         }
-    } while (again);
+    }
 
     bye_screen();
     snd_silence();
@@ -1822,6 +1781,5 @@ int main(void) {
     vc_clear_oam();
     vc_set_scroll_x(0);
     vc_set_scroll_y(0);
-    rom_uart_puts("\r\nSaliendo al monitor...\r\n");
-    return 0;
+    return 0;   /* -> startup.s activa el autoboot (como QB) */
 }
